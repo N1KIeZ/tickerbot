@@ -64,7 +64,8 @@ def api_post(path, data):
         return json.loads(resp.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         try:
-            return json.loads(e.read().decode('utf-8'))
+            data = json.loads(e.read().decode('utf-8'))
+            return {'success': False, 'message': data.get('detail') or str(data)}
         except Exception:
             return {'success': False, 'message': f'HTTP {e.code}'}
     except Exception as e:
@@ -296,7 +297,7 @@ async def genkey(ctx, duration: str = "lifetime", amount: int = 1):
     })
 
     if not result.get('success'):
-        await ctx.send(f"Failed to generate keys: {result.get('message', 'Unknown error')}")
+        await ctx.send(f"Failed to generate keys: {result.get('message', 'Unknown error')}\n> Debug: secret length={len(BOT_SECRET)}, first6={BOT_SECRET[:6]}...")
         return
 
     keys = result.get('keys', [])
