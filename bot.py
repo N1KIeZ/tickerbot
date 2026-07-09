@@ -224,7 +224,6 @@ async def panel(ctx):
 async def csm(ctx, channel: discord.TextChannel, *, message: str):
     """Sends a normal message to a specific channel (Usage: !csm #channel Your message here)"""
     try:
-        # Send as a normal message (no embed, no footer)
         await channel.send(message)
         await ctx.send(f"✅ Message sent to {channel.mention}!", delete_after=5)
         
@@ -240,10 +239,10 @@ async def csm(ctx, channel: discord.TextChannel, *, message: str):
 @bot.command(name='clear')
 @commands.has_role(STAFF_ROLE_ID)
 async def clear_channel(ctx, channel: discord.TextChannel):
-    """Clears all messages in a channel (Usage: !clear #channel)"""
+    """Clears all messages by deleting and recreating the channel (Usage: !clear #channel)"""
     
     # Confirm with the user
-    confirm_msg = await ctx.send(f"⚠️ Are you sure you want to delete **ALL** messages in {channel.mention}? This action **CANNOT** be undone!\nReply with `yes` to confirm or `no` to cancel. (You have 15 seconds)")
+    await ctx.send(f"⚠️ Are you sure you want to **DELETE and RECREATE** {channel.mention}? This will delete **ALL** messages and is **IRREVERSIBLE**!\nReply with `yes` to confirm or `no` to cancel. (You have 15 seconds)")
 
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ["yes", "no"]
@@ -256,45 +255,56 @@ async def clear_channel(ctx, channel: discord.TextChannel):
             return
         
         # User confirmed with "yes"
-        await ctx.send(f"🗑️ Deleting all messages in {channel.mention}... This may take a moment.")
+        await ctx.send(f"🗑️ Deleting and recreating {channel.mention}...")
         
-        # Delete messages in batches
-        deleted_count = 0
+        # Save channel properties before deletion
+        channel_name = channel.name
+        channel_topic = channel.topic
+        channel_position = channel.position
+        channel_category = channel.category
+        channel_slowmode_delay = channel.slowmode_delay
+        channel_nsfw = channel.nsfw
         
-        # Try to delete messages in bulk first (faster)
-        async for message in channel.history(limit=None):
-            try:
-                # Delete in batches of 100 (Discord limit)
-                if deleted_count % 100 == 0:
-                    # Get last 100 messages to delete
-                    batch = []
-                    async for msg in channel.history(limit=100, after=message):
-                        batch.append(msg)
-                    
-                    if batch:
-                        await channel.delete_messages(batch)
-                        deleted_count += len(batch)
-            except discord.HTTPException:
-                # If bulk delete fails, delete one by one
-                try:
-                    await message.delete()
-                    deleted_count += 1
-                except:
-                    pass
+        # Save permission overwrites
+        overwrites = channel.overwrites
         
-        # Send confirmation
+        # Delete the channel
+        await channel.delete()
+        
+        # Create new channel with same properties
+        new_channel = await ctx.guild.create_text_channel(
+            name=channel_name,
+            topic=channel_topic,
+            position=channel_position,
+            category=channel_category,
+            slowmode_delay=channel_slowmode_delay,
+            nsfw=channel_nsfw,
+            overwrites=overwrites
+        )
+        
+        # Send confirmation in the new channel
         embed = discord.Embed(
             title="🧹 Channel Cleared",
-            description=f"Successfully deleted **{deleted_count}** messages from {channel.mention}!",
+            description=f"Successfully **cleared** this channel!\n\nAll messages have been deleted and the channel was recreated with the same settings.",
             color=discord.Color.green(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
-        embed.set_footer(text=f"Cleared by {ctx.author}")
+        embed.add_field(name="Channel Name", value=f"#{channel_name}", inline=True)
+        embed.add_field(name="Category", value=channel_category.name if channel_category else "None", inline=True)
+        embed.add_field(name="Cleared by", value=ctx.author.mention, inline=True)
+        embed.set_footer(text=f"Channel ID: {new_channel.id}")
         
-        await ctx.send(embed=embed)
+        await new_channel.send(embed=embed)
+        
+        # Also send a confirmation in the command channel
+        await ctx.send(f"✅ Channel {new_channel.mention} has been successfully cleared and recreated!")
         
     except TimeoutError:
         await ctx.send("❌ Clear command timed out. Please try again and respond with `yes` or `no` within 15 seconds.")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete or recreate this channel!")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Failed to clear channel: {e}")
     except Exception as e:
         await ctx.send(f"❌ An error occurred: {e}")
 
