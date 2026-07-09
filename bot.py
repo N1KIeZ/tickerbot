@@ -742,6 +742,83 @@ async def filter_error(ctx, error):
         await ctx.send(f"Error: {error}")
 
 
+# ---------- EMBED COMMAND ----------
+@bot.tree.command(name="embed", description="Send a custom embed to a channel")
+@app_commands.describe(
+    channel="Channel to send the embed to",
+    title="Embed title",
+    description="Main text content of the embed",
+    color="Color: red, green, blue, gold, purple, orange, or hex like #ff0000",
+    image="Optional: attach an image file (PNG/JPG)",
+    thumbnail="If checked, image appears as thumbnail instead of large image"
+)
+@app_commands.checks.has_role(STAFF_ROLE_ID)
+async def embed_command(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    title: str,
+    description: str,
+    color: str = "blue",
+    image: discord.Attachment = None,
+    thumbnail: bool = False
+):
+    await interaction.response.defer(ephemeral=True)
+
+    color_map = {
+        "red": discord.Color.red(),
+        "green": discord.Color.green(),
+        "blue": discord.Color.blue(),
+        "gold": discord.Color.gold(),
+        "purple": discord.Color.purple(),
+        "orange": discord.Color.orange(),
+        "teal": discord.Color.teal(),
+        "pink": discord.Color.from_rgb(255, 105, 180),
+    }
+
+    parsed_color = color_map.get(color.lower().strip(), None)
+    if parsed_color is None:
+        try:
+            hex_str = color.lstrip("#")
+            rgb = tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+            parsed_color = discord.Color.from_rgb(*rgb)
+        except Exception:
+            parsed_color = discord.Color.blue()
+
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=parsed_color,
+        timestamp=datetime.datetime.now(datetime.UTC)
+    )
+    embed.set_footer(text=f"Sent by {interaction.user}", icon_url=interaction.user.display_avatar.url)
+
+    if image:
+        try:
+            img_data = await image.read()
+            file = discord.File(fp=bytes(img_data), filename=image.filename)
+            if thumbnail:
+                embed.set_thumbnail(url=f"attachment://{image.filename}")
+            else:
+                embed.set_image(url=f"attachment://{image.filename}")
+            await channel.send(embed=embed, file=file)
+        except Exception as e:
+            await channel.send(embed=embed)
+            await interaction.followup.send(f"Embed sent but image failed: {e}", ephemeral=True)
+            return
+    else:
+        await channel.send(embed=embed)
+
+    await interaction.followup.send(f"Embed sent to {channel.mention}!", ephemeral=True)
+
+
+@embed_command.error
+async def embed_error(interaction: discord.Interaction, error):
+    if isinstance(error, app_commands.MissingRole):
+        await interaction.response.send_message("You don't have permission to use this command!", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
 # ---------- BOT START ----------
 if __name__ == "__main__":
     if not TOKEN:
