@@ -309,6 +309,75 @@ async def clear_channel(ctx, channel: discord.TextChannel):
         await ctx.send(f"❌ An error occurred: {e}")
 
 
+# ---------- !PPL COMMAND ----------
+@bot.command(name='ppl')
+@commands.has_role(STAFF_ROLE_ID)
+async def ppl(ctx):
+    """Shows PayPal Family & Friends payment information"""
+    
+    embed = discord.Embed(
+        title="💳 PayPal - Family & Friends",
+        description="Please send the payment via **PayPal Family & Friends** to the following email:",
+        color=discord.Color.blue(),
+        timestamp=datetime.datetime.now(datetime.UTC)
+    )
+    embed.add_field(
+        name="📧 Email",
+        value="**irinamai1978@aim.com**",
+        inline=False
+    )
+    embed.add_field(
+        name="📸 After Payment",
+        value="Please send a **screenshot** of the payment proof in this ticket.",
+        inline=False
+    )
+    embed.add_field(
+        name="⚠️ Important",
+        value="• Use **Family & Friends** only\n• Include your **username** in the payment note\n• Keep the screenshot ready",
+        inline=False
+    )
+    embed.set_footer(text="Payment System | PayPal")
+    
+    await ctx.send(embed=embed)
+
+
+# ---------- !CRYPTO COMMAND ----------
+@bot.command(name='crypto')
+@commands.has_role(STAFF_ROLE_ID)
+async def crypto(ctx):
+    """Shows cryptocurrency payment information"""
+    
+    embed = discord.Embed(
+        title="🪙 Cryptocurrency Payment",
+        description="Please send the payment to the following wallet address:",
+        color=discord.Color.gold(),
+        timestamp=datetime.datetime.now(datetime.UTC)
+    )
+    embed.add_field(
+        name="💳 Wallet Address",
+        value="**LKUStekx6U5e6VERZAE2ag9xeN5Pv7H4Ck**",
+        inline=False
+    )
+    embed.add_field(
+        name="🌐 Network",
+        value="USDT (BEP-20 / ERC-20)",
+        inline=False
+    )
+    embed.add_field(
+        name="📸 After Payment",
+        value="Please send a **screenshot** of the payment proof in this ticket.",
+        inline=False
+    )
+    embed.add_field(
+        name="⚠️ Important",
+        value="• Double-check the wallet address\n• Include your **username** in the payment note\n• Keep the screenshot ready",
+        inline=False
+    )
+    embed.set_footer(text="Payment System | Cryptocurrency")
+    
+    await ctx.send(embed=embed)
+
+
 # ---------- !BAN COMMAND ----------
 @bot.command(name='ban')
 @commands.has_role(STAFF_ROLE_ID)
@@ -444,6 +513,16 @@ async def clear_error(ctx, error):
         await ctx.send("❌ Missing argument! Usage: `!clear #channel`")
     else:
         await ctx.send(f"❌ Error: {error}")
+
+@ppl.error
+async def ppl_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("❌ You don't have permission to use this command!")
+
+@crypto.error
+async def crypto_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("❌ You don't have permission to use this command!")
 
 
 # ---------- BOT START ----------
