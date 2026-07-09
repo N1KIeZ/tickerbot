@@ -236,6 +236,69 @@ async def csm(ctx, channel: discord.TextChannel, *, message: str):
         await ctx.send(f"❌ An error occurred: {e}")
 
 
+# ---------- !CLEAR COMMAND ----------
+@bot.command(name='clear')
+@commands.has_role(STAFF_ROLE_ID)
+async def clear_channel(ctx, channel: discord.TextChannel):
+    """Clears all messages in a channel (Usage: !clear #channel)"""
+    
+    # Confirm with the user
+    confirm_msg = await ctx.send(f"⚠️ Are you sure you want to delete **ALL** messages in {channel.mention}? This action **CANNOT** be undone!\nReply with `yes` to confirm or `no` to cancel. (You have 15 seconds)")
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ["yes", "no"]
+    
+    try:
+        response = await bot.wait_for('message', timeout=15.0, check=check)
+        
+        if response.content.lower() == "no":
+            await ctx.send("❌ Clear command cancelled.")
+            return
+        
+        # User confirmed with "yes"
+        await ctx.send(f"🗑️ Deleting all messages in {channel.mention}... This may take a moment.")
+        
+        # Delete messages in batches
+        deleted_count = 0
+        
+        # Try to delete messages in bulk first (faster)
+        async for message in channel.history(limit=None):
+            try:
+                # Delete in batches of 100 (Discord limit)
+                if deleted_count % 100 == 0:
+                    # Get last 100 messages to delete
+                    batch = []
+                    async for msg in channel.history(limit=100, after=message):
+                        batch.append(msg)
+                    
+                    if batch:
+                        await channel.delete_messages(batch)
+                        deleted_count += len(batch)
+            except discord.HTTPException:
+                # If bulk delete fails, delete one by one
+                try:
+                    await message.delete()
+                    deleted_count += 1
+                except:
+                    pass
+        
+        # Send confirmation
+        embed = discord.Embed(
+            title="🧹 Channel Cleared",
+            description=f"Successfully deleted **{deleted_count}** messages from {channel.mention}!",
+            color=discord.Color.green(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        embed.set_footer(text=f"Cleared by {ctx.author}")
+        
+        await ctx.send(embed=embed)
+        
+    except TimeoutError:
+        await ctx.send("❌ Clear command timed out. Please try again and respond with `yes` or `no` within 15 seconds.")
+    except Exception as e:
+        await ctx.send(f"❌ An error occurred: {e}")
+
+
 # ---------- !BAN COMMAND ----------
 @bot.command(name='ban')
 @commands.has_role(STAFF_ROLE_ID)
@@ -358,6 +421,17 @@ async def csm_error(ctx, error):
         await ctx.send("❌ Channel not found! Usage: `!csm #channel Your message`")
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("❌ Missing arguments! Usage: `!csm #channel Your message`")
+    else:
+        await ctx.send(f"❌ Error: {error}")
+
+@clear_channel.error
+async def clear_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("❌ You don't have permission to use this command!")
+    elif isinstance(error, commands.ChannelNotFound):
+        await ctx.send("❌ Channel not found! Usage: `!clear #channel`")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Missing argument! Usage: `!clear #channel`")
     else:
         await ctx.send(f"❌ Error: {error}")
 
