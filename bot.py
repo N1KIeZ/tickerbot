@@ -4,6 +4,7 @@ from discord import app_commands
 import datetime
 import os
 import threading
+import json
 from flask import Flask
 
 # ---------- KONFIGURATION ----------
@@ -40,6 +41,77 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Aktive Tickets tracken
 active_tickets = set()
+
+# ---------- FILTER SYSTEM ----------
+# Blacklisted words and their replacement suggestions
+FILTER_WORDS = {
+    "cheat": "scheat",
+    "spoof": "w00fer",
+    "hack": "h4ck",
+    "crack": "cr4ck",
+    "exploit": "3xpl01t",
+    "bypass": "byp4ss",
+    "inject": "1nj3ct",
+    "mod": "m0d",
+    "wallhack": "wallh4ck",
+    "aimbot": "4imb0t",
+    "scam": "sc4m",
+    "fraud": "fr4ud"
+}
+
+# Global filter state (True = enabled, False = disabled)
+filter_enabled = False
+
+def get_filtered_words():
+    """Get all filtered words"""
+    return list(FILTER_WORDS.keys())
+
+def get_suggestion(word):
+    """Get the suggested replacement for a word"""
+    return FILTER_WORDS.get(word.lower(), "***")
+
+# ---------- FILTER EVENT ----------
+@bot.event
+async def on_message(message):
+    # Ignore messages from the bot itself
+    if message.author == bot.user:
+        await bot.process_commands(message)
+        return
+
+    # Check if filter is enabled globally
+    if filter_enabled:
+        filtered_words = get_filtered_words()
+        
+        # Check if message contains any filtered word
+        content_lower = message.content.lower()
+        for word in filtered_words:
+            if word in content_lower:
+                try:
+                    # Delete the message
+                    await message.delete()
+                    
+                    # Send warning with suggestion
+                    suggestion = get_suggestion(word)
+                    warning = discord.Embed(
+                        title="🚫 Message Filtered",
+                        description=f"Your message was removed because it contained a blocked word.\n\nPlease use alternative words like **{suggestion}** instead.",
+                        color=discord.Color.red(),
+                        timestamp=datetime.datetime.now(datetime.UTC)
+                    )
+                    warning.set_footer(text=f"Filtered in #{message.channel.name}")
+                    
+                    await message.channel.send(
+                        f"{message.author.mention}",
+                        embed=warning,
+                        delete_after=10
+                    )
+                    break
+                except discord.Forbidden:
+                    pass
+                except discord.HTTPException:
+                    pass
+
+    await bot.process_commands(message)
 
 
 # ---------- TICKET VIEWS ----------
@@ -216,6 +288,49 @@ async def panel(ctx):
     view = TicketView()
     await channel.send(embed=embed, view=view)
     await ctx.send(f"✅ Ticket panel sent to {channel.mention}!")
+
+
+# ---------- !FILTER COMMAND ----------
+@bot.command(name='filter')
+@commands.has_role(STAFF_ROLE_ID)
+async def filter_command(ctx):
+    """
+    Toggle global word filter on/off for ALL channels
+    Usage: !filter
+    """
+    global filter_enabled
+    
+    # Toggle filter state
+    filter_enabled = not filter_enabled
+    
+    if filter_enabled:
+        embed = discord.Embed(
+            title="🔴 Global Filter ENABLED",
+            description="The word filter is now **active** in **ALL** channels!\n\nAny messages containing blocked words will be deleted.",
+            color=discord.Color.green(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        
+        # Show filtered words
+        word_list = "\n".join([f"• `{word}` → `{FILTER_WORDS[word]}`" for word in FILTER_WORDS.keys()])
+        embed.add_field(
+            name="📋 Filtered Words",
+            value=word_list,
+            inline=False
+        )
+        embed.set_footer(text=f"Enabled by {ctx.author}")
+        
+        await ctx.send(embed=embed)
+    else:
+        embed = discord.Embed(
+            title="🟢 Global Filter DISABLED",
+            description="The word filter is now **inactive** in all channels.\n\nAll words are allowed again.",
+            color=discord.Color.orange(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        embed.set_footer(text=f"Disabled by {ctx.author}")
+        
+        await ctx.send(embed=embed)
 
 
 # ---------- !CSM COMMAND ----------
@@ -514,15 +629,12 @@ async def clear_error(ctx, error):
     else:
         await ctx.send(f"❌ Error: {error}")
 
-@ppl.error
-async def ppl_error(ctx, error):
+@filter_command.error
+async def filter_error(ctx, error):
     if isinstance(error, commands.MissingRole):
         await ctx.send("❌ You don't have permission to use this command!")
-
-@crypto.error
-async def crypto_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("❌ You don't have permission to use this command!")
+    else:
+        await ctx.send(f"❌ Error: {error}")
 
 
 # ---------- BOT START ----------
