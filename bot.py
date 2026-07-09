@@ -50,16 +50,16 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label="🛒 Buy Ticket", style=discord.ButtonStyle.success, custom_id="buy_ticket")
     async def buy_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.create_ticket(interaction, "Buy")
+        await self.create_ticket(interaction, "buy")
 
     @discord.ui.button(label="🆘 Support Ticket", style=discord.ButtonStyle.primary, custom_id="support_ticket")
     async def support_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.create_ticket(interaction, "Support")
+        await self.create_ticket(interaction, "support")
 
     async def create_ticket(self, interaction: discord.Interaction, ticket_type: str):
         # Check if user already has an open ticket
         for channel in interaction.guild.channels:
-            if isinstance(channel, discord.TextChannel) and channel.name.startswith(f"ticket-{interaction.user.id}"):
+            if isinstance(channel, discord.TextChannel) and channel.name.startswith(f"{ticket_type}-{interaction.user.id}"):
                 await interaction.response.send_message("You already have an open ticket!", ephemeral=True)
                 return
 
@@ -75,20 +75,21 @@ class TicketView(discord.ui.View):
             await interaction.response.send_message("Ticket category not found! Contact an admin.", ephemeral=True)
             return
 
-        # Create channel
+        # Create channel with type-specific name
+        channel_name = f"{ticket_type}-{interaction.user.id}"
         channel = await interaction.guild.create_text_channel(
-            name=f"ticket-{interaction.user.id}",
+            name=channel_name,
             category=category,
             overwrites=overwrites,
-            topic=f"{ticket_type} ticket from {interaction.user} (ID: {interaction.user.id})"
+            topic=f"{ticket_type.capitalize()} ticket from {interaction.user} (ID: {interaction.user.id})"
         )
 
         active_tickets.add(channel.id)
 
         # Welcome message with Close button
         embed = discord.Embed(
-            title=f"🎫 {ticket_type} Ticket Created",
-            description=f"Hello {interaction.user.mention},\n\nPlease describe your issue. The team will assist you shortly.\n\n**Ticket Type:** {ticket_type}\n\nClick the **Close** button below to close this ticket.",
+            title=f"🎫 {ticket_type.capitalize()} Ticket Created",
+            description=f"Hello {interaction.user.mention},\n\nPlease describe your issue. The team will assist you shortly.\n\n**Ticket Type:** {ticket_type.capitalize()}\n\nClick the **Close** button below to close this ticket.",
             color=discord.Color.green(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
@@ -96,7 +97,7 @@ class TicketView(discord.ui.View):
 
         view = CloseTicketView(channel.id)
         await channel.send(embed=embed, view=view)
-        await interaction.response.send_message(f"✅ {ticket_type} ticket created: {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ {ticket_type.capitalize()} ticket created: {channel.mention}", ephemeral=True)
 
 
 class CloseTicketView(discord.ui.View):
@@ -221,17 +222,10 @@ async def panel(ctx):
 @bot.command(name='csm')
 @commands.has_role(STAFF_ROLE_ID)
 async def csm(ctx, channel: discord.TextChannel, *, message: str):
-    """Sends a message to a specific channel (Usage: !csm #channel Your message here)"""
+    """Sends a normal message to a specific channel (Usage: !csm #channel Your message here)"""
     try:
-        embed = discord.Embed(
-            title="📢 Staff Announcement",
-            description=message,
-            color=discord.Color.purple(),
-            timestamp=datetime.datetime.now(datetime.UTC)
-        )
-        embed.set_footer(text=f"Sent by {ctx.author}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
-        
-        await channel.send(embed=embed)
+        # Send as a normal message (no embed, no footer)
+        await channel.send(message)
         await ctx.send(f"✅ Message sent to {channel.mention}!", delete_after=5)
         
     except discord.Forbidden:
