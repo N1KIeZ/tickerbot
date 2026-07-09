@@ -21,7 +21,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot ist am Leben!"
+    return "✅ Bot is alive!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
@@ -44,19 +44,26 @@ active_tickets = set()
 
 # ---------- TICKET VIEWS ----------
 class TicketView(discord.ui.View):
-    """View mit Button zum Ticket öffnen"""
+    """View with two buttons: Buy and Support"""
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="📩 Ticket öffnen", style=discord.ButtonStyle.primary, custom_id="open_ticket")
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Prüfen ob User schon ein offenes Ticket hat
+    @discord.ui.button(label="🛒 Buy Ticket", style=discord.ButtonStyle.success, custom_id="buy_ticket")
+    async def buy_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "Buy")
+
+    @discord.ui.button(label="🆘 Support Ticket", style=discord.ButtonStyle.primary, custom_id="support_ticket")
+    async def support_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "Support")
+
+    async def create_ticket(self, interaction: discord.Interaction, ticket_type: str):
+        # Check if user already has an open ticket
         for channel in interaction.guild.channels:
             if isinstance(channel, discord.TextChannel) and channel.name.startswith(f"ticket-{interaction.user.id}"):
-                await interaction.response.send_message("Du hast bereits ein offenes Ticket!", ephemeral=True)
+                await interaction.response.send_message("You already have an open ticket!", ephemeral=True)
                 return
 
-        # Berechtigungen für den Ticket-Channel
+        # Permissions for the ticket channel
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, embed_links=True),
@@ -65,23 +72,23 @@ class TicketView(discord.ui.View):
 
         category = interaction.guild.get_channel(TICKET_CATEGORY_ID)
         if not category:
-            await interaction.response.send_message("Ticket-Kategorie nicht gefunden! Kontaktiere einen Admin.", ephemeral=True)
+            await interaction.response.send_message("Ticket category not found! Contact an admin.", ephemeral=True)
             return
 
-        # Channel erstellen
+        # Create channel
         channel = await interaction.guild.create_text_channel(
             name=f"ticket-{interaction.user.id}",
             category=category,
             overwrites=overwrites,
-            topic=f"Ticket von {interaction.user} (ID: {interaction.user.id})"
+            topic=f"{ticket_type} ticket from {interaction.user} (ID: {interaction.user.id})"
         )
 
         active_tickets.add(channel.id)
 
-        # Willkommens-Nachricht mit Close-Button
+        # Welcome message with Close button
         embed = discord.Embed(
-            title="🎫 Ticket erstellt",
-            description=f"Hallo {interaction.user.mention},\n\nBitte beschreibe dein Anliegen. Das Team wird dir schnellstmöglich helfen.\n\nZum Schließen klicke auf den **Close**-Button.",
+            title=f"🎫 {ticket_type} Ticket Created",
+            description=f"Hello {interaction.user.mention},\n\nPlease describe your issue. The team will assist you shortly.\n\n**Ticket Type:** {ticket_type}\n\nClick the **Close** button below to close this ticket.",
             color=discord.Color.green(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
@@ -89,57 +96,57 @@ class TicketView(discord.ui.View):
 
         view = CloseTicketView(channel.id)
         await channel.send(embed=embed, view=view)
-        await interaction.response.send_message(f"✅ Ticket erstellt: {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ {ticket_type} ticket created: {channel.mention}", ephemeral=True)
 
 
 class CloseTicketView(discord.ui.View):
-    """View mit Close-Button für Tickets"""
+    """View with Close button for tickets"""
     def __init__(self, channel_id):
         super().__init__(timeout=None)
         self.channel_id = channel_id
 
-    @discord.ui.button(label="🔒 Ticket schließen", style=discord.ButtonStyle.danger, custom_id="close_ticket")
+    @discord.ui.button(label="🔒 Close Ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.channel.id != self.channel_id:
-            await interaction.response.send_message("Du kannst nur im Ticket-Channel schließen!", ephemeral=True)
+            await interaction.response.send_message("You can only close this ticket in the ticket channel!", ephemeral=True)
             return
 
-        # Prüfen ob User berechtigt ist (Ticket-Ersteller oder Staff)
+        # Check if user is authorized (ticket creator or staff)
         is_staff = interaction.user.guild_permissions.manage_channels or any(role.id == STAFF_ROLE_ID for role in interaction.user.roles)
         ticket_owner_id = int(interaction.channel.topic.split("ID: ")[-1].strip())
         
         if not is_staff and interaction.user.id != ticket_owner_id:
-            await interaction.response.send_message("Du bist nicht berechtigt dieses Ticket zu schließen!", ephemeral=True)
+            await interaction.response.send_message("You are not authorized to close this ticket!", ephemeral=True)
             return
 
-        # Modal für den Schließgrund
-        class CloseModal(discord.ui.Modal, title="Ticket schließen"):
+        # Modal for closing reason
+        class CloseModal(discord.ui.Modal, title="Close Ticket"):
             reason = discord.ui.TextInput(
-                label="Grund für das Schließen",
+                label="Reason for closing",
                 style=discord.TextStyle.paragraph,
                 placeholder="Optional...",
                 required=False
             )
 
             async def on_submit(self, modal_interaction: discord.Interaction):
-                reason = self.reason.value or "Kein Grund angegeben."
+                reason = self.reason.value or "No reason provided."
                 channel = modal_interaction.channel
 
-                # Abschiedsnachricht
+                # Farewell message
                 embed = discord.Embed(
-                    title="🔒 Ticket geschlossen",
-                    description=f"Geschlossen von {modal_interaction.user.mention}\nGrund: {reason}",
+                    title="🔒 Ticket Closed",
+                    description=f"Closed by {modal_interaction.user.mention}\nReason: {reason}",
                     color=discord.Color.dark_red(),
                     timestamp=datetime.datetime.now(datetime.UTC)
                 )
                 await channel.send(embed=embed)
 
-                # Transcript erstellen
-                transcript = f"Ticket geschlossen am {datetime.datetime.now(datetime.UTC).isoformat()}\n"
+                # Create transcript
+                transcript = f"Ticket closed at {datetime.datetime.now(datetime.UTC).isoformat()}\n"
                 transcript += f"Channel: #{channel.name}\n"
-                transcript += f"Eröffnet von: {channel.topic}\n"
-                transcript += f"Geschlossen von: {modal_interaction.user}\n"
-                transcript += f"Grund: {reason}\n\n=== Letzte 50 Nachrichten ===\n"
+                transcript += f"Opened by: {channel.topic}\n"
+                transcript += f"Closed by: {modal_interaction.user}\n"
+                transcript += f"Reason: {reason}\n\n=== Last 50 Messages ===\n"
                 
                 async for msg in channel.history(limit=50):
                     transcript += f"[{msg.created_at}] {msg.author}: {msg.content}\n"
@@ -149,20 +156,20 @@ class CloseTicketView(discord.ui.View):
                     filename=f"transcript-{channel.name}.txt"
                 )
 
-                # Transcript an den Schließer senden
+                # Send transcript to closer
                 try:
                     await modal_interaction.user.send(
-                        f"📄 Transcript für {channel.mention}",
+                        f"📄 Transcript for {channel.mention}",
                         file=transcript_file
                     )
                 except:
-                    pass  # Wenn DMs deaktiviert sind
+                    pass  # If DMs are disabled
 
-                # Channel löschen
+                # Delete channel
                 await channel.delete()
                 active_tickets.discard(channel.id)
 
-                await modal_interaction.response.send_message("Ticket geschlossen!", ephemeral=True)
+                await modal_interaction.response.send_message("Ticket closed!", ephemeral=True)
 
         await interaction.response.send_modal(CloseModal())
 
@@ -170,79 +177,104 @@ class CloseTicketView(discord.ui.View):
 # ---------- BOT EVENTS ----------
 @bot.event
 async def on_ready():
-    print(f'✅ Bot gestartet als {bot.user} (ID: {bot.user.id})')
+    print(f'✅ Bot started as {bot.user} (ID: {bot.user.id})')
     print('-' * 30)
     
-    # Persistent View registrieren
+    # Register persistent view
     bot.add_view(TicketView())
     
-    # Slash-Commands synchronisieren
+    # Sync slash commands
     try:
         synced = await bot.tree.sync()
-        print(f'✅ {len(synced)} Slash-Commands synchronisiert')
+        print(f'✅ {len(synced)} Slash-Commands synchronized')
     except Exception as e:
-        print(f'❌ Fehler bei Sync: {e}')
+        print(f'❌ Error during sync: {e}')
     
     print('-' * 30)
-    print('Bot ist bereit!')
+    print('Bot is ready!')
 
 
 # ---------- !PANEL COMMAND ----------
 @bot.command(name='panel')
 @commands.has_role(STAFF_ROLE_ID)
 async def panel(ctx):
-    """Sendet das Ticket-Embed in den Ticket-Channel"""
+    """Sends the ticket embed with Buy and Support buttons"""
     channel = bot.get_channel(TICKET_CHANNEL_ID)
     
     if not channel:
-        await ctx.send("❌ Ticket-Channel nicht gefunden! Prüfe die ID.")
+        await ctx.send("❌ Ticket channel not found! Check the ID.")
         return
     
     embed = discord.Embed(
-        title="🎫 Support Tickets",
-        description="Klicke auf den Button unten, um ein Ticket zu erstellen.\nUnser Team wird dir schnellstmöglich helfen.",
+        title="🎫 Support & Buy Tickets",
+        description="Click a button below to create a ticket:\n\n🛒 **Buy Ticket** - For purchase inquiries\n🆘 **Support Ticket** - For general support\n\nOur team will assist you shortly!",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="Ticket System - Klicke auf den Button")
+    embed.set_footer(text="Ticket System - Click a button")
     
     view = TicketView()
     await channel.send(embed=embed, view=view)
-    await ctx.send(f"✅ Ticket-Panel wurde in {channel.mention} gesendet!")
+    await ctx.send(f"✅ Ticket panel sent to {channel.mention}!")
+
+
+# ---------- !CSM COMMAND ----------
+@bot.command(name='csm')
+@commands.has_role(STAFF_ROLE_ID)
+async def csm(ctx, channel: discord.TextChannel, *, message: str):
+    """Sends a message to a specific channel (Usage: !csm #channel Your message here)"""
+    try:
+        embed = discord.Embed(
+            title="📢 Staff Announcement",
+            description=message,
+            color=discord.Color.purple(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        embed.set_footer(text=f"Sent by {ctx.author}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+        
+        await channel.send(embed=embed)
+        await ctx.send(f"✅ Message sent to {channel.mention}!", delete_after=5)
+        
+    except discord.Forbidden:
+        await ctx.send(f"❌ I don't have permission to send messages in {channel.mention}!")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Failed to send message: {e}")
+    except Exception as e:
+        await ctx.send(f"❌ An error occurred: {e}")
 
 
 # ---------- !BAN COMMAND ----------
 @bot.command(name='ban')
 @commands.has_role(STAFF_ROLE_ID)
-async def ban_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben"):
-    """Bannt einen User"""
+async def ban_user(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Bans a user"""
     if member == ctx.author:
-        await ctx.send("❌ Du kannst dich nicht selbst bannen!")
+        await ctx.send("❌ You can't ban yourself!")
         return
     
     if member.guild_permissions.administrator:
-        await ctx.send("❌ Du kannst keinen Admin bannen!")
+        await ctx.send("❌ You can't ban an admin!")
         return
     
     try:
         await member.ban(reason=reason)
         
         embed = discord.Embed(
-            title="🔨 User gebannt",
+            title="🔨 User Banned",
             color=discord.Color.dark_red(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
         embed.add_field(name="User", value=f"{member.mention} ({member.name}#{member.discriminator})", inline=False)
-        embed.add_field(name="Grund", value=reason, inline=False)
-        embed.add_field(name="Gebannt von", value=ctx.author.mention, inline=False)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Banned by", value=ctx.author.mention, inline=False)
         embed.set_footer(text=f"User ID: {member.id}")
         
         await ctx.send(embed=embed)
         
-        # User per DM benachrichtigen
+        # DM the user
         try:
             dm_embed = discord.Embed(
-                title="🔨 Du wurdest gebannt",
-                description=f"Du wurdest von **{ctx.author}** gebannt.\nGrund: {reason}",
+                title="🔨 You have been banned",
+                description=f"You were banned by **{ctx.author}**.\nReason: {reason}",
                 color=discord.Color.dark_red()
             )
             await member.send(embed=dm_embed)
@@ -250,42 +282,42 @@ async def ban_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben"
             pass
             
     except Exception as e:
-        await ctx.send(f"❌ Fehler beim Bannen: {e}")
+        await ctx.send(f"❌ Error during ban: {e}")
 
 
 # ---------- !KICK COMMAND ----------
 @bot.command(name='kick')
 @commands.has_role(STAFF_ROLE_ID)
-async def kick_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben"):
-    """Kickt einen User"""
+async def kick_user(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Kicks a user"""
     if member == ctx.author:
-        await ctx.send("❌ Du kannst dich nicht selbst kicken!")
+        await ctx.send("❌ You can't kick yourself!")
         return
     
     if member.guild_permissions.administrator:
-        await ctx.send("❌ Du kannst keinen Admin kicken!")
+        await ctx.send("❌ You can't kick an admin!")
         return
     
     try:
         await member.kick(reason=reason)
         
         embed = discord.Embed(
-            title=" User gekickt",
+            title="👢 User Kicked",
             color=discord.Color.orange(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
         embed.add_field(name="User", value=f"{member.mention} ({member.name}#{member.discriminator})", inline=False)
-        embed.add_field(name="Grund", value=reason, inline=False)
-        embed.add_field(name="Gekickt von", value=ctx.author.mention, inline=False)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Kicked by", value=ctx.author.mention, inline=False)
         embed.set_footer(text=f"User ID: {member.id}")
         
         await ctx.send(embed=embed)
         
-        # User per DM benachrichtigen
+        # DM the user
         try:
             dm_embed = discord.Embed(
-                title=" Du wurdest gekickt",
-                description=f"Du wurdest von **{ctx.author}** gekickt.\nGrund: {reason}",
+                title="👢 You have been kicked",
+                description=f"You were kicked by **{ctx.author}**.\nReason: {reason}",
                 color=discord.Color.orange()
             )
             await member.send(embed=dm_embed)
@@ -293,45 +325,56 @@ async def kick_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben
             pass
             
     except Exception as e:
-        await ctx.send(f"❌ Fehler beim Kicken: {e}")
+        await ctx.send(f"❌ Error during kick: {e}")
 
 
-# ---------- FEHLERHANDLUNG ----------
+# ---------- ERROR HANDLING ----------
 @ban_user.error
 async def ban_error(ctx, error):
     if isinstance(error, commands.MissingRole):
-        await ctx.send("❌ Du hast keine Berechtigung für diesen Befehl!")
+        await ctx.send("❌ You don't have permission to use this command!")
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Mir fehlen die Berechtigungen für diesen Befehl!")
+        await ctx.send("❌ I'm missing permissions for this command!")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ Member nicht gefunden!")
+        await ctx.send("❌ Member not found!")
     else:
-        await ctx.send(f"❌ Fehler: {error}")
+        await ctx.send(f"❌ Error: {error}")
 
 @kick_user.error
 async def kick_error(ctx, error):
     if isinstance(error, commands.MissingRole):
-        await ctx.send("❌ Du hast keine Berechtigung für diesen Befehl!")
+        await ctx.send("❌ You don't have permission to use this command!")
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Mir fehlen die Berechtigungen für diesen Befehl!")
+        await ctx.send("❌ I'm missing permissions for this command!")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ Member nicht gefunden!")
+        await ctx.send("❌ Member not found!")
     else:
-        await ctx.send(f"❌ Fehler: {error}")
+        await ctx.send(f"❌ Error: {error}")
 
 @panel.error
 async def panel_error(ctx, error):
     if isinstance(error, commands.MissingRole):
-        await ctx.send("❌ Du hast keine Berechtigung für diesen Befehl!")
+        await ctx.send("❌ You don't have permission to use this command!")
+
+@csm.error
+async def csm_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("❌ You don't have permission to use this command!")
+    elif isinstance(error, commands.ChannelNotFound):
+        await ctx.send("❌ Channel not found! Usage: `!csm #channel Your message`")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Missing arguments! Usage: `!csm #channel Your message`")
+    else:
+        await ctx.send(f"❌ Error: {error}")
 
 
-# ---------- BOT STARTEN ----------
+# ---------- BOT START ----------
 if __name__ == "__main__":
     if not TOKEN:
-        raise ValueError("❌ Kein Token gefunden! Setze DISCORD_TOKEN Environment Variable.")
+        raise ValueError("❌ No token found! Set DISCORD_TOKEN Environment Variable.")
     
-    # Flask Server starten (für Render)
+    # Start Flask server (for Render)
     keep_alive()
     
-    # Bot starten
+    # Start bot
     bot.run(TOKEN)
