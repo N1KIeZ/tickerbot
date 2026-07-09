@@ -82,16 +82,21 @@ async def on_message(message):
     if filter_enabled:
         filtered_words = get_filtered_words()
         
-        # Check if message contains any filtered word
+        # Check if message contains any filtered word (as whole word only)
         content_lower = message.content.lower()
-        for word in filtered_words:
-            if word in content_lower:
+        words = content_lower.split()
+        
+        for word in words:
+            # Remove punctuation from the word for checking
+            clean_word = ''.join(c for c in word if c.isalnum())
+            
+            if clean_word in filtered_words:
                 try:
                     # Delete the message
                     await message.delete()
                     
                     # Send warning with suggestion
-                    suggestion = get_suggestion(word)
+                    suggestion = get_suggestion(clean_word)
                     warning = discord.Embed(
                         title="🚫 Message Filtered",
                         description=f"Your message was removed because it contained a blocked word.\n\nPlease use alternative words like **{suggestion}** instead.",
