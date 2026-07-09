@@ -784,6 +784,8 @@ async def embed_command(
         except Exception:
             parsed_color = discord.Color.blue()
 
+    description = description.replace(r'\n', '\n')
+
     embed = discord.Embed(
         title=title,
         description=description,
@@ -793,20 +795,12 @@ async def embed_command(
     embed.set_footer(text=f"Sent by {interaction.user}", icon_url=interaction.user.display_avatar.url)
 
     if image:
-        try:
-            img_data = await image.read()
-            file = discord.File(fp=bytes(img_data), filename=image.filename)
-            if thumbnail:
-                embed.set_thumbnail(url=f"attachment://{image.filename}")
-            else:
-                embed.set_image(url=f"attachment://{image.filename}")
-            await channel.send(embed=embed, file=file)
-        except Exception as e:
-            await channel.send(embed=embed)
-            await interaction.followup.send(f"Embed sent but image failed: {e}", ephemeral=True)
-            return
-    else:
-        await channel.send(embed=embed)
+        if thumbnail:
+            embed.set_thumbnail(url=image.url)
+        else:
+            embed.set_image(url=image.url)
+
+    await channel.send(embed=embed)
 
     await interaction.followup.send(f"Embed sent to {channel.mention}!", ephemeral=True)
 
