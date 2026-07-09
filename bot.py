@@ -2,9 +2,12 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import datetime
+import os
+from flask import Flask
+from threading import Thread
 
 # ---------- KONFIGURATION ----------
-TOKEN = "MTUyMzcwNjIwODgwNzI5MzAwOQ.Gi0z7O.rjQ1mDiedjngAgcLVe1PjZJa-EoYHzgH5VV2RE"  # Setze deinen Token hier
+TOKEN = os.getenv('MTUyMzcwNjIwODgwNzI5MzAwOQ.GMZ9-S.fh1ffOqk01hoJNu640R9xT1FSYqBpO3mBu-KkQ')  # Holt Token aus Environment Variables
 
 # IDs aus deiner Nachricht
 STAFF_ROLE_ID = 1523143819493773363  # Rolle die !ban, !kick, !panel nutzen darf
@@ -13,6 +16,21 @@ TICKET_CATEGORY_ID = 1523143855271186512  # Kategorie für Ticket-Channels
 
 # -----------------------------------
 
+# Flask App für Render Web Service
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "🤖 Bot ist am Leben und läuft!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
+
+# Discord Bot Setup
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -217,7 +235,7 @@ async def ban_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben"
         
         await ctx.send(embed=embed)
         
-        # Optional: User per DM benachrichtigen
+        # User per DM benachrichtigen
         try:
             dm_embed = discord.Embed(
                 title="🔨 Du wurdest gebannt",
@@ -260,7 +278,7 @@ async def kick_user(ctx, member: discord.Member, *, reason="Kein Grund angegeben
         
         await ctx.send(embed=embed)
         
-        # Optional: User per DM benachrichtigen
+        # User per DM benachrichtigen
         try:
             dm_embed = discord.Embed(
                 title="👢 Du wurdest gekickt",
@@ -306,4 +324,11 @@ async def panel_error(ctx, error):
 
 # ---------- BOT STARTEN ----------
 if __name__ == "__main__":
+    if not TOKEN:
+        raise ValueError("❌ Kein Token gefunden! Setze DISCORD_TOKEN Environment Variable.")
+    
+    # Flask Keep-Alive Server starten (für Render Web Service)
+    keep_alive()
+    
+    # Bot starten
     bot.run(TOKEN)
