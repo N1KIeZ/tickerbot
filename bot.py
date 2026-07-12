@@ -402,7 +402,7 @@ class ReviewModal(discord.ui.Modal, title="Leave a Review"):
             color=discord.Color.gold(),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
-        embed.set_footer(text=f"Reviewed by {modal_interaction.user.display_name}", icon_url=modal_interaction.user.display_avatar.url)
+        embed.set_footer(text=f"Reviewed by {modal_interaction.user.mention}", icon_url=modal_interaction.user.display_avatar.url)
         await modal_interaction.response.send_message(embed=embed)
 
         # Re-send the panel so it stays at the bottom
