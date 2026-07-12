@@ -16,6 +16,8 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 STAFF_ROLE_ID = 1523143819493773363
 TICKET_CHANNEL_ID = 1523143872040140951
 TICKET_CATEGORY_ID = 1523143855271186512
+CUSTOMER_CHANNEL_ID = 1525970419885150268
+CUSTOMER_ROLE_ID = 1523143830151499846
 
 # Key system config
 API_BASE = os.getenv('API_BASE', 'https://website-0bcg.onrender.com')
@@ -255,6 +257,49 @@ class CloseTicketView(discord.ui.View):
         await interaction.response.send_modal(CloseModal())
 
 
+# ---------- CUSTOMER CLAIM VIEW ----------
+class CustomerKeyModal(discord.ui.Modal, title="Claim Customer Role"):
+    key = discord.ui.TextInput(
+        label="License Key",
+        placeholder="Enter your license key...",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=200
+    )
+
+    async def on_submit(self, modal_interaction: discord.Interaction):
+        role = modal_interaction.guild.get_role(CUSTOMER_ROLE_ID)
+        if not role:
+            await modal_interaction.response.send_message("Role not found! Contact an admin.", ephemeral=True)
+            return
+
+        result = api_post('/api/bot/verify', {
+            'key': self.key.value.strip(),
+            'secret': BOT_SECRET,
+        })
+
+        if result.get('valid'):
+            await modal_interaction.user.add_roles(role)
+            embed = discord.Embed(
+                title="Role Claimed",
+                description=f"You have successfully claimed {role.mention}!",
+                color=discord.Color.green()
+            )
+            await modal_interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await modal_interaction.response.send_message("Invalid or expired license key. Please check your key and try again.", ephemeral=True)
+
+
+class CustomerClaimView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Claim Customer Role", style=discord.ButtonStyle.primary, custom_id="claim_customer")
+    async def claim_customer(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = CustomerKeyModal()
+        await interaction.response.send_modal(modal)
+
+
 # ---------- PANELFIX VIEW ----------
 class PanelfixView(discord.ui.View):
     def __init__(self):
@@ -314,6 +359,7 @@ async def on_ready():
 
     bot.add_view(TicketView())
     bot.add_view(PanelfixView())
+    bot.add_view(CustomerClaimView())
 
     try:
         synced = await bot.tree.sync()
@@ -545,6 +591,27 @@ async def panelfix(ctx):
     await ctx.send(embed=embed, view=view)
 
 
+# ---------- !CUSTOMER COMMAND ----------
+@bot.command(name='customer')
+@commands.has_role(STAFF_ROLE_ID)
+async def customer(ctx):
+    channel = bot.get_channel(CUSTOMER_CHANNEL_ID)
+    if not channel:
+        await ctx.send("Customer channel not found! Check the ID.")
+        return
+
+    embed = discord.Embed(
+        title="Claim Your Customer Role",
+        description="Click the button below and enter a valid license key to receive the **Customer** role.",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="Customer Role System")
+
+    view = CustomerClaimView()
+    await channel.send(embed=embed, view=view)
+    await ctx.send(f"Customer panel sent to {channel.mention}!")
+
+
 # ---------- FILTER COMMAND ----------
 @bot.command(name='filter')
 @commands.has_role(STAFF_ROLE_ID)
@@ -773,6 +840,11 @@ async def kick_error(ctx, error):
         await ctx.send("Member not found!")
     else:
         await ctx.send(f"Error: {error}")
+
+@customer.error
+async def customer_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
 
 @panelfix.error
 async def panelfix_error(ctx, error):
