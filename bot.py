@@ -255,6 +255,57 @@ class CloseTicketView(discord.ui.View):
         await interaction.response.send_modal(CloseModal())
 
 
+# ---------- PANELFIX VIEW ----------
+class PanelfixView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="1", style=discord.ButtonStyle.secondary, custom_id="panelfix_1")
+    async def fix_1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Fix #1",
+            description="Try renaming the loader to something else (e.g., loady, loader, etc.).",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="2", style=discord.ButtonStyle.secondary, custom_id="panelfix_2")
+    async def fix_2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Fix #2",
+            description="After logging in and pressing launch, instantly tab into FiveM, press Escape and F8 for safety. This will fix it.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="3", style=discord.ButtonStyle.secondary, custom_id="panelfix_3")
+    async def fix_3(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Fix #3",
+            description="Yes, this is a known issue. I'm a solo dev and it takes time to get all offsets working. This is the beta phase.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="4", style=discord.ButtonStyle.secondary, custom_id="panelfix_4")
+    async def fix_4(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Fix #4",
+            description="That error means you either wiped or reset your PC. Open a ticket and ask for an HWID reset.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="5", style=discord.ButtonStyle.secondary, custom_id="panelfix_5")
+    async def fix_5(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Fix #5",
+            description="Noclip and Godmode are unsafe. All other options are 100% undetected and safe, but I recommend using Silent Aim instead of Aimbot because Aimbot could get logged and get you manually banned.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
+
+
 # ---------- BOT EVENTS ----------
 @bot.event
 async def on_ready():
@@ -262,6 +313,7 @@ async def on_ready():
     print('-' * 30)
 
     bot.add_view(TicketView())
+    bot.add_view(PanelfixView())
 
     try:
         synced = await bot.tree.sync()
@@ -476,6 +528,21 @@ async def panel(ctx):
     view = TicketView()
     await channel.send(embed=embed, view=view)
     await ctx.send(f"Ticket panel sent to {channel.mention}!")
+
+
+# ---------- !PANELFIX COMMAND ----------
+@bot.command(name='panelfix')
+@commands.has_role(STAFF_ROLE_ID)
+async def panelfix(ctx):
+    embed = discord.Embed(
+        title="Known Issues & Fixes",
+        description="**1.** After login and pressing launch, the loader closes but no scheat console appears\n**2.** Press Launch, console appears but in-game no menu, nothing\n**3.** On some servers some options don't work properly\n**4.** HWID Mismatch error\n**5.** What options are safe and which are very detected?\n\nClick a button below to see the fix for each issue.",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="Select an issue to see the fix")
+
+    view = PanelfixView()
+    await ctx.send(embed=embed, view=view)
 
 
 # ---------- FILTER COMMAND ----------
@@ -706,6 +773,11 @@ async def kick_error(ctx, error):
         await ctx.send("Member not found!")
     else:
         await ctx.send(f"Error: {error}")
+
+@panelfix.error
+async def panelfix_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
 
 @panel.error
 async def panel_error(ctx, error):
