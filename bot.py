@@ -7,6 +7,9 @@ import threading
 import json
 import urllib.request
 import urllib.error
+import asyncio
+import random
+import re
 from flask import Flask
 
 # ---------- CONFIGURATION ----------
@@ -49,6 +52,9 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Active tickets track
 active_tickets = set()
+
+# Autorole
+auto_role_id = None
 
 
 # ---------- API HELPERS ----------
@@ -135,6 +141,18 @@ async def on_message(message):
                     pass
 
     await bot.process_commands(message)
+
+
+# ---------- AUTOROLE ----------
+@bot.event
+async def on_member_join(member):
+    if auto_role_id:
+        role = member.guild.get_role(auto_role_id)
+        if role:
+            try:
+                await member.add_roles(role)
+            except:
+                pass
 
 
 # ---------- TICKET VIEWS ----------
@@ -612,6 +630,31 @@ async def customer(ctx):
     await ctx.send(f"Customer panel sent to {channel.mention}!")
 
 
+# ---------- !AUTOROLE COMMAND ----------
+@bot.command(name='autorole')
+@commands.has_role(STAFF_ROLE_ID)
+async def autorole(ctx, *, role_input: str = None):
+    global auto_role_id
+    if role_input is None:
+        await ctx.send("Usage: `!autorole @role` or `!autorole disable`")
+        return
+    if role_input.lower() == "disable":
+        auto_role_id = None
+        await ctx.send("Autorole disabled.")
+        return
+    if len(ctx.message.role_mentions) == 0:
+        await ctx.send("Please mention a valid role. Usage: `!autorole @role`")
+        return
+    role = ctx.message.role_mentions[0]
+    auto_role_id = role.id
+    embed = discord.Embed(
+        title="Autorole Set",
+        description=f"New members will now automatically receive {role.mention}",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+
+
 # ---------- FILTER COMMAND ----------
 @bot.command(name='filter')
 @commands.has_role(STAFF_ROLE_ID)
@@ -878,12 +921,105 @@ async def clear_error(ctx, error):
     else:
         await ctx.send(f"Error: {error}")
 
+@autorole.error
+async def autorole_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
+    else:
+        await ctx.send(f"Error: {error}")
+
 @filter_command.error
 async def filter_error(ctx, error):
     if isinstance(error, commands.MissingRole):
         await ctx.send("You don't have permission to use this command!")
     else:
         await ctx.send(f"Error: {error}")
+
+
+# ---------- GIVEAWAY HELPERS ----------
+def parse_duration(duration: str):
+    unit = duration[-1].lower()
+    num = duration[:-1]
+    if not num.isdigit():
+        return None
+    num = int(num)
+    if unit == 'm':
+        return num * 60
+    elif unit == 'h':
+        return num * 3600
+    elif unit == 'd':
+        return num * 86400
+    elif unit == 'w':
+        return num * 604800
+    return None
+
+
+# ---------- /GIVEAWAY COMMAND ----------
+@bot.tree.command(name="giveaway", description="Start a giveaway")
+@app_commands.describe(
+    prize="What to win",
+    winners="Number of winners",
+    duration="Duration (e.g. 1h, 1d, 1w)",
+    channel="Channel to post the giveaway in (default: current)"
+)
+@app_commands.checks.has_role(STAFF_ROLE_ID)
+async def giveaway(
+    interaction: discord.Interaction,
+    prize: str,
+    winners: app_commands.Range[int, 1, 50],
+    duration: str,
+    channel: discord.TextChannel = None
+):
+    seconds = parse_duration(duration)
+    if seconds is None:
+        await interaction.response.send_message("Invalid duration. Use format like `1h`, `1d`, `1w`, `30m`.", ephemeral=True)
+        return
+
+    target = channel or interaction.channel
+    end_time = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=seconds)
+
+    embed = discord.Embed(
+        title="🎉 Giveaway",
+        description=f"**Prize:** {prize}\n**Winners:** {winners}\n**Ends:** <t:{int(end_time.timestamp())}:R>",
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
+
+    await interaction.response.send_message(f"Giveaway starting in {target.mention}!", ephemeral=True)
+    msg = await target.send(embed=embed)
+    await msg.add_reaction("🎉")
+
+    await asyncio.sleep(seconds)
+
+    msg = await target.fetch_message(msg.id)
+    reaction = discord.utils.get(msg.reactions, emoji="🎉")
+    if not reaction:
+        await target.send("Giveaway cancelled — no reactions found.")
+        return
+
+    users = [u async for u in reaction.users() if u != bot.user]
+    if len(users) == 0:
+        await target.send("Giveaway cancelled — no participants.")
+        return
+
+    actual_winners = min(winners, len(users))
+    chosen = random.sample(users, actual_winners)
+    mentions = ", ".join(u.mention for u in chosen)
+
+    result = discord.Embed(
+        title="🎉 Giveaway Ended",
+        description=f"**Prize:** {prize}\n**Winners:** {mentions}\n\nCongratulations!",
+        color=discord.Color.green()
+    )
+    await target.send(embed=result)
+
+
+@giveaway.error
+async def giveaway_error(interaction: discord.Interaction, error):
+    if isinstance(error, app_commands.MissingRole):
+        await interaction.response.send_message("You don't have permission to use this command!", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
 # ---------- EMBED COMMAND ----------
