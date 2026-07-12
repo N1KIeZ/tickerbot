@@ -21,6 +21,7 @@ TICKET_CHANNEL_ID = 1523143872040140951
 TICKET_CATEGORY_ID = 1523143855271186512
 CUSTOMER_CHANNEL_ID = 1525970419885150268
 CUSTOMER_ROLE_ID = 1523143830151499846
+REVIEW_CHANNEL_ID = 1523143869942861934
 
 # Key system config
 API_BASE = os.getenv('API_BASE', 'https://website-0bcg.onrender.com')
@@ -330,7 +331,7 @@ class PanelfixView(discord.ui.View):
             description="Try renaming the loader to something else (e.g., loady, loader, etc.).",
             color=discord.Color.green()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="2", style=discord.ButtonStyle.secondary, custom_id="panelfix_2")
     async def fix_2(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -339,7 +340,7 @@ class PanelfixView(discord.ui.View):
             description="After logging in and pressing launch, instantly tab into FiveM, press Escape and F8 for safety. This will fix it.",
             color=discord.Color.green()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="3", style=discord.ButtonStyle.secondary, custom_id="panelfix_3")
     async def fix_3(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -348,7 +349,7 @@ class PanelfixView(discord.ui.View):
             description="Yes, this is a known issue. I'm a solo dev and it takes time to get all offsets working. This is the beta phase.",
             color=discord.Color.green()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="4", style=discord.ButtonStyle.secondary, custom_id="panelfix_4")
     async def fix_4(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -357,7 +358,7 @@ class PanelfixView(discord.ui.View):
             description="That error means you either wiped or reset your PC. Open a ticket and ask for an HWID reset.",
             color=discord.Color.green()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="5", style=discord.ButtonStyle.secondary, custom_id="panelfix_5")
     async def fix_5(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -366,7 +367,63 @@ class PanelfixView(discord.ui.View):
             description="Noclip and Godmode are unsafe. All other options are 100% undetected and safe, but I recommend using Silent Aim instead of Aimbot because Aimbot could get logged and get you manually banned.",
             color=discord.Color.green()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------- REVIEW VIEW ----------
+class ReviewModal(discord.ui.Modal, title="Leave a Review"):
+    product = discord.ui.TextInput(
+        label="What did you buy? / Duration",
+        placeholder="e.g. Lifetime, 1 Month, Week...",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=100
+    )
+    rating = discord.ui.TextInput(
+        label="Rating (1-5)",
+        placeholder="1 | 2 | 3 | 4 | 5",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=1
+    )
+    notes = discord.ui.TextInput(
+        label="Notes",
+        placeholder="Very good, fast delivery, etc.",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
+
+    async def on_submit(self, modal_interaction: discord.Interaction):
+        stars = "⭐" * min(max(int(self.rating.value or 0), 1), 5)
+        embed = discord.Embed(
+            title="New Review",
+            description=f"**Product:** {self.product.value}\n**Rating:** {stars} ({self.rating.value}/5)\n**Notes:** {self.notes.value}",
+            color=discord.Color.gold(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        embed.set_footer(text=f"Reviewed by {modal_interaction.user.display_name}", icon_url=modal_interaction.user.display_avatar.url)
+        await modal_interaction.response.send_message(embed=embed)
+
+        # Re-send the panel so it stays at the bottom
+        channel = modal_interaction.guild.get_channel(REVIEW_CHANNEL_ID)
+        if channel:
+            embed_panel = discord.Embed(
+                title="Leave a Review",
+                description="Click the button below to leave a review about your purchase!",
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed_panel, view=ReviewView())
+
+
+class ReviewView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Write a Review", style=discord.ButtonStyle.primary, custom_id="write_review")
+    async def write_review(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = ReviewModal()
+        await interaction.response.send_modal(modal)
 
 
 # ---------- BOT EVENTS ----------
@@ -378,6 +435,7 @@ async def on_ready():
     bot.add_view(TicketView())
     bot.add_view(PanelfixView())
     bot.add_view(CustomerClaimView())
+    bot.add_view(ReviewView())
 
     try:
         synced = await bot.tree.sync()
@@ -628,6 +686,106 @@ async def customer(ctx):
     view = CustomerClaimView()
     await channel.send(embed=embed, view=view)
     await ctx.send(f"Customer panel sent to {channel.mention}!")
+
+
+# ---------- !COUCH COMMAND ----------
+@bot.command(name='couch')
+@commands.has_role(STAFF_ROLE_ID)
+async def couch(ctx):
+    channel = bot.get_channel(REVIEW_CHANNEL_ID)
+    if not channel:
+        await ctx.send("Review channel not found! Check the ID.")
+        return
+    embed = discord.Embed(
+        title="Leave a Review",
+        description="Click the button below to leave a review about your purchase!",
+        color=discord.Color.blue()
+    )
+    await channel.send(embed=embed, view=ReviewView())
+    await ctx.send(f"Review panel sent to {channel.mention}!")
+
+
+# ---------- !CMDS COMMAND ----------
+@bot.command(name='cmds')
+async def cmds(ctx):
+    embed = discord.Embed(
+        title="Bot Commands",
+        description="Here are all available commands:",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="🔑 Key Management", value="`!genkey <duration> [amount]` — Generate keys\n`!verify <key>` — Verify a key\n`!revoke <key>` — Revoke a key", inline=False)
+    embed.add_field(name="🎫 Tickets", value="`!panel` — Send ticket panel\n`!customer` — Send customer role panel", inline=False)
+    embed.add_field(name="🛠️ Moderation", value="`!ban <user> [reason]` — Ban a user\n`!kick <user> [reason]` — Kick a user\n`!unbann <user>` — Unban a user\n`!timeout <user> <duration> <reason>` — Timeout a user\n`!clear #channel` — Delete and recreate a channel\n`!csm #channel <msg>` — Send a message as the bot", inline=False)
+    embed.add_field(name="⚙️ Settings", value="`!autorole @role` — Set join role\n`!filter` — Toggle word filter\n`!couch` — Send review panel\n`!panelfix` — Send known issues panel", inline=False)
+    embed.add_field(name="💳 Payment", value="`!ppl` — PayPal info\n`!crypto` — Crypto info\n`!embed` — Create a custom embed (/embed)", inline=False)
+    embed.add_field(name="🎉 Giveaway", value="`/giveaway` — Start a giveaway (slash command)", inline=False)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    await ctx.send(embed=embed)
+
+
+# ---------- !UNBANN COMMAND ----------
+@bot.command(name='unbann')
+@commands.has_role(STAFF_ROLE_ID)
+async def unbann(ctx, *, user_input: str = None):
+    if not user_input:
+        await ctx.send("Usage: `!unbann <user_id>`")
+        return
+    try:
+        user_id = int(user_input.strip("<@!>"))
+    except ValueError:
+        await ctx.send("Please provide a valid user ID.")
+        return
+    bans = [entry async for entry in ctx.guild.bans()]
+    target = None
+    for ban_entry in bans:
+        if ban_entry.user.id == user_id:
+            target = ban_entry.user
+            break
+    if not target:
+        await ctx.send("That user is not banned.")
+        return
+    try:
+        await ctx.guild.unban(target)
+        embed = discord.Embed(
+            title="User Unbanned",
+            description=f"{target.mention} ({target.id}) has been unbanned.",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"Failed to unban: {e}")
+
+
+# ---------- !TIMEOUT COMMAND ----------
+@bot.command(name='timeout')
+@commands.has_role(STAFF_ROLE_ID)
+async def timeout(ctx, member: discord.Member = None, duration: str = None, *, reason: str = "No reason provided"):
+    if not member or not duration:
+        await ctx.send("Usage: `!timeout <user> <duration> <reason>`\nDurations: `1m`, `5m`, `10m`, `1h`, `1d`")
+        return
+    seconds = parse_duration(duration)
+    if seconds is None or seconds > 86400 * 28:
+        await ctx.send("Invalid duration. Max 28 days. Use format like `10m`, `1h`, `1d`.")
+        return
+    try:
+        await member.timeout(datetime.timedelta(seconds=seconds), reason=reason)
+        embed = discord.Embed(
+            title="User Timed Out",
+            description=f"{member.mention} has been timed out for **{duration}**.\n**Reason:** {reason}",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+        try:
+            dm = discord.Embed(
+                title="You've Been Timed Out",
+                description=f"**Server:** {ctx.guild.name}\n**Duration:** {duration}\n**Reason:** {reason}",
+                color=discord.Color.red()
+            )
+            await member.send(embed=dm)
+        except:
+            pass
+    except Exception as e:
+        await ctx.send(f"Failed to timeout user: {e}")
 
 
 # ---------- !AUTOROLE COMMAND ----------
@@ -918,6 +1076,27 @@ async def clear_error(ctx, error):
         await ctx.send("Channel not found! Usage: `!clear #channel`")
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("Missing argument! Usage: `!clear #channel`")
+    else:
+        await ctx.send(f"Error: {error}")
+
+@couch.error
+async def couch_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
+
+@unbann.error
+async def unbann_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
+    else:
+        await ctx.send(f"Error: {error}")
+
+@timeout.error
+async def timeout_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("You don't have permission to use this command!")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("Member not found!")
     else:
         await ctx.send(f"Error: {error}")
 
